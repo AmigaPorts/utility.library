@@ -7,51 +7,23 @@
 
 struct UtilityLibrary* utilityOpen(struct UtilityLibrary* base asm("a6"))
 {
-    base->utility.ub_LibNode.lib_Flags &= ~LIBF_DELEXP;
     base->utility.ub_LibNode.lib_OpenCnt++;
 
     return base;
 }
 
-ULONG utilityExpunge(struct UtilityLibrary* base asm("a6"))
-{
-    struct ExecBase* SysBase = base->exec;
-    struct Library* library = &base->utility.ub_LibNode;
-
-    // A ROM resident cannot be loaded again, so it has system lifetime.
-    // Only a disk-loaded instance gives its memory and segment list back.
-    if (!base->segment) {
-        return 0;
-    }
-
-    library->lib_Flags |= LIBF_DELEXP;
-
-    if (library->lib_OpenCnt != 0) {
-        return 0;
-    }
-
-    Remove(&library->lib_Node);
-
-    ULONG segment = base->segment;
-    ULONG negative = library->lib_NegSize;
-
-    FreeMem((UBYTE*)base - negative, negative + library->lib_PosSize);
-
-    return segment;
-}
-
 ULONG utilityClose(struct UtilityLibrary* base asm("a6"))
 {
-    struct Library* library = &base->utility.ub_LibNode;
+    base->utility.ub_LibNode.lib_OpenCnt--;
 
-    if (--library->lib_OpenCnt != 0) {
-        return 0;
-    }
+    return 0;
+}
 
-    if (library->lib_Flags & LIBF_DELEXP) {
-        return utilityExpunge(base);
-    }
-
+// utility.library has system lifetime, however it was loaded. The base holds
+// the root name space, which may still list objects whose owners closed the
+// library, and the GetUniqueID() counter, which must never restart.
+ULONG utilityExpunge(void)
+{
     return 0;
 }
 
@@ -79,8 +51,8 @@ struct UtilityLibrary* Init(ULONG segment asm("a0"), struct ExecBase* SysBase as
 
     struct Library* library = &base->utility.ub_LibNode;
 
+    (void)segment;
     base->exec = SysBase;
-    base->segment = segment;
 
     // OpenLibrary() compares its version argument with lib_Version, and a
     // disk library is only found if ln_Name equals its file name.

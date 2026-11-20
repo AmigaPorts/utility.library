@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
-cmake_minimum_required(VERSION 3.14.0)
+# INTERFACE libraries with sources (sfdc) need 3.19.
+cmake_minimum_required(VERSION 3.19.0)
 project(utility.library LANGUAGES C VERSION 40.1)
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")

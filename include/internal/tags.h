@@ -9,7 +9,7 @@ struct UtilityLibrary;
 struct TagItem* NextTagItem(struct TagItem** tagItemPtr);
 struct TagItem* FindTagItem(Tag tagValue, struct TagItem* tagList);
 ULONG GetTagData(Tag tagValue, ULONG defaultVal, struct TagItem* tagList);
-BOOL TagInArray(Tag tagValue, Tag* tagArray);
+LONG TagInArray(Tag tagValue, Tag* tagArray);
 struct TagItem* AllocateTagItems(ULONG numTags, struct UtilityLibrary* base);
 VOID FreeTagItems(struct TagItem* tagList, struct UtilityLibrary* base);
 struct TagItem* CloneTagItems(struct TagItem* original, struct UtilityLibrary* base);

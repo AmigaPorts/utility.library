@@ -3246,6 +3246,196 @@ static void test_openlibrary_version_gate(void)
         CloseLibrary(lib);
 }
 
+
+/* ======================================================================
+ * Edge cases found in review, each first probed against Kickstart 3.1.
+ * Every helper runs the same sequence against one base and records raw
+ * results; the test passes when both bases agree with the values the
+ * original was observed to return. The DIAG lines mark progress, as in
+ * the tests above, so a stall shows up at a known step.
+ * ====================================================================== */
+
+static void checkdate_beyond_range(struct Library *base, ULONG *v)
+{
+    struct ClockData date;
+
+    date.sec = 0; date.min = 0; date.hour = 0; date.mday = 1; date.month = 1; date.year = 2200; date.wday = 0;
+    v[0] = CheckDate_Call(base, &date);
+    date.mday = 8; date.month = 2; date.year = 2114;
+    v[1] = CheckDate_Call(base, &date);
+    /* The last representable second, and the one after it. */
+    date.mday = 7; date.hour = 6; date.min = 28; date.sec = 15;
+    v[2] = CheckDate_Call(base, &date);
+    date.sec = 16;
+    v[3] = CheckDate_Call(base, &date);
+}
+
+static void test_checkdate_beyond_range(struct Library *newBase, struct Library *realBase)
+{
+    ULONG n[4], r[4];
+
+    checkdate_beyond_range(newBase, n);
+    checkdate_beyond_range(realBase, r);
+
+    result((CONST_STRPTR) "CheckDate-BeyondSecondsRange-Rejected",
+           (BOOL)(n[0] == 0 && n[1] == 0 && n[2] == 0xFFFFFFFF && n[3] == 0
+                  && r[0] == 0 && r[1] == 0 && r[2] == 0xFFFFFFFF && r[3] == 0));
+}
+
+/* ANO_NameSpace is a boolean tag: a value with only high-word bits set is
+ * still TRUE, so the object must work as a name space. */
+static ULONG namespace_tag_high_word(struct Library *base)
+{
+    struct TagItem oddTag[] = { { ANO_NameSpace, 0x00010000 }, { TAG_DONE, 0 } };
+    struct NamedObject *ns, *obj;
+    ULONG added;
+
+    ns = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "OddNS", oddTag);
+    report((CONST_STRPTR) "DIAG oddns 1\r\n", NULL);
+    obj = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "OddObj", NULL);
+    report((CONST_STRPTR) "DIAG oddns 2\r\n", NULL);
+    added = AddNamedObject_Call(base, ns, obj);
+    report((CONST_STRPTR) "DIAG oddns 3\r\n", NULL);
+    if (added)
+        AttemptRemNamedObject_Call(base, obj);
+    report((CONST_STRPTR) "DIAG oddns 4\r\n", NULL);
+    FreeNamedObject_Call(base, obj);
+    report((CONST_STRPTR) "DIAG oddns 5\r\n", NULL);
+    FreeNamedObject_Call(base, ns);
+    report((CONST_STRPTR) "DIAG oddns 6\r\n", NULL);
+
+    return added;
+}
+
+static void test_namespace_tag_high_word(struct Library *newBase, struct Library *realBase)
+{
+    ULONG n = namespace_tag_high_word(newBase);
+    ULONG r = namespace_tag_high_word(realBase);
+
+    /* Compared as full longwords: the original returns -1 for success. */
+    result((CONST_STRPTR) "AllocNamedObject-NameSpaceTagHighWord-IsTrue",
+           (BOOL)(n == 0xFFFFFFFF && r == 0xFFFFFFFF));
+}
+
+/* In an NSF_CASE name space "Foo" and "foo" are distinct, and a search
+ * must tell them apart the same way the duplicate check does. */
+static void find_case_sensitive(struct Library *base, ULONG *v)
+{
+    struct TagItem caseTag[] = { { ANO_NameSpace, TRUE }, { ANO_Flags, NSF_NODUPS | NSF_CASE }, { TAG_DONE, 0 } };
+    struct NamedObject *ns, *upper, *lower, *found;
+
+    ns = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "CaseNS", caseTag);
+    report((CONST_STRPTR) "DIAG findcase 1\r\n", NULL);
+    upper = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "Foo", NULL);
+    report((CONST_STRPTR) "DIAG findcase 2\r\n", NULL);
+    lower = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "foo", NULL);
+    report((CONST_STRPTR) "DIAG findcase 3\r\n", NULL);
+    v[0] = (ULONG)(AddNamedObject_Call(base, ns, upper) != 0);
+    report((CONST_STRPTR) "DIAG findcase 4\r\n", NULL);
+    v[1] = (ULONG)(AddNamedObject_Call(base, ns, lower) != 0);
+    report((CONST_STRPTR) "DIAG findcase 5\r\n", NULL);
+
+    found = (struct NamedObject *)FindNamedObject_Call(base, ns, (APTR) "foo", NULL);
+    report((CONST_STRPTR) "DIAG findcase 6\r\n", NULL);
+    v[2] = found == upper ? 1 : (found == lower ? 2 : 0);
+    if (found)
+        ReleaseNamedObject_Call(base, found);
+
+    found = (struct NamedObject *)FindNamedObject_Call(base, ns, (APTR) "FOO", NULL);
+    report((CONST_STRPTR) "DIAG findcase 7\r\n", NULL);
+    v[3] = found == upper ? 1 : (found == lower ? 2 : 0);
+    if (found)
+        ReleaseNamedObject_Call(base, found);
+
+    if (v[0])
+        AttemptRemNamedObject_Call(base, upper);
+    if (v[1])
+        AttemptRemNamedObject_Call(base, lower);
+    FreeNamedObject_Call(base, upper);
+    report((CONST_STRPTR) "DIAG findcase 8\r\n", NULL);
+    FreeNamedObject_Call(base, lower);
+    report((CONST_STRPTR) "DIAG findcase 9\r\n", NULL);
+    FreeNamedObject_Call(base, ns);
+    report((CONST_STRPTR) "DIAG findcase 10\r\n", NULL);
+}
+
+static void test_find_case_sensitive(struct Library *newBase, struct Library *realBase)
+{
+    ULONG n[4], r[4];
+
+    find_case_sensitive(newBase, n);
+    find_case_sensitive(realBase, r);
+
+    result((CONST_STRPTR) "FindNamedObject-NsfCase-IsCaseSensitive",
+           (BOOL)(n[0] == 1 && n[1] == 1 && n[2] == 2 && n[3] == 0
+                  && r[0] == 1 && r[1] == 1 && r[2] == 2 && r[3] == 0));
+}
+
+/* A failed AddNamedObject() must return zero in all of D0, not only in
+ * its low word. The objects are left allocated: freeing after this
+ * sequence is what the NonNamespaceObject test further down covers. */
+static ULONG add_failure_raw(struct Library *base)
+{
+    struct NamedObject *ns, *obj;
+
+    ns = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "PlainNS", NULL);
+    report((CONST_STRPTR) "DIAG addfail 1\r\n", NULL);
+    obj = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "PlainObj", NULL);
+    report((CONST_STRPTR) "DIAG addfail 2\r\n", NULL);
+
+    { ULONG r = AddNamedObject_Call(base, ns, obj);
+      report((CONST_STRPTR) "DIAG addfail 3\r\n", NULL); return r; }
+}
+
+static void test_add_failure_raw(struct Library *newBase, struct Library *realBase)
+{
+    ULONG n = add_failure_raw(newBase);
+    ULONG r = add_failure_raw(realBase);
+
+    result((CONST_STRPTR) "AddNamedObject-Failure-ReturnsFullZero", (BOOL)(n == 0 && r == 0));
+}
+
+/* An object removed with AttemptRemNamedObject() can be added again and
+ * found again, but a second AttemptRemNamedObject() then fails and
+ * leaves it in the name space -- on the original too. Recorded here so
+ * that the shared behaviour is a tested fact rather than an accident.
+ * The objects are left allocated, since the name space still lists one. */
+static void readd_after_remove(struct Library *base, ULONG *v)
+{
+    struct TagItem nsTag[] = { { ANO_NameSpace, TRUE }, { TAG_DONE, 0 } };
+    struct NamedObject *ns, *obj, *found;
+
+    ns = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "ReAddNS", nsTag);
+    report((CONST_STRPTR) "DIAG readd 1\r\n", NULL);
+    obj = (struct NamedObject *)AllocNamedObjectA_Call(base, (APTR) "ReAddObj", NULL);
+    report((CONST_STRPTR) "DIAG readd 2\r\n", NULL);
+    v[0] = (ULONG)(AddNamedObject_Call(base, ns, obj) != 0);
+    report((CONST_STRPTR) "DIAG readd 3\r\n", NULL);
+    v[1] = AttemptRemNamedObject_Call(base, obj);
+    report((CONST_STRPTR) "DIAG readd 4\r\n", NULL);
+    v[2] = (ULONG)(AddNamedObject_Call(base, ns, obj) != 0);
+    report((CONST_STRPTR) "DIAG readd 5\r\n", NULL);
+    found = (struct NamedObject *)FindNamedObject_Call(base, ns, (APTR) "ReAddObj", NULL);
+    report((CONST_STRPTR) "DIAG readd 6\r\n", NULL);
+    v[3] = (ULONG)(found != NULL);
+    if (found)
+        ReleaseNamedObject_Call(base, found);
+    v[4] = AttemptRemNamedObject_Call(base, obj);
+    report((CONST_STRPTR) "DIAG readd 7\r\n", NULL);
+}
+
+static void test_readd_after_remove(struct Library *newBase, struct Library *realBase)
+{
+    ULONG n[5], r[5];
+
+    readd_after_remove(newBase, n);
+    readd_after_remove(realBase, r);
+
+    result((CONST_STRPTR) "AddNamedObject-AfterAttemptRem-SecondRemoveFails",
+           (BOOL)(n[0] == 1 && n[1] == 1 && n[2] == 1 && n[3] == 1 && n[4] == 0
+                  && r[0] == 1 && r[1] == 1 && r[2] == 1 && r[3] == 1 && r[4] == 0));
+}
+
 int main(void)
 {
     struct Process *me = (struct Process *)FindTask(NULL);
@@ -3341,6 +3531,11 @@ int main(void)
             newBase, (CONST_STRPTR) "ConcurrentFindReleaseVsRemNamedObject-NewLibrary");
         test_concurrent_find_release_vs_rem(
             realBase, (CONST_STRPTR) "ConcurrentFindReleaseVsRemNamedObject-RealROM");
+        test_checkdate_beyond_range(newBase, realBase);
+        test_namespace_tag_high_word(newBase, realBase);
+        test_find_case_sensitive(newBase, realBase);
+        test_add_failure_raw(newBase, realBase);
+        test_readd_after_remove(newBase, realBase);
         test_addnamedobject_nonnamespace_object(newBase, realBase);
         test_findnamedobject_nonnamespace_object(newBase, realBase);
         test_getuniqueid_twice(newBase, realBase);

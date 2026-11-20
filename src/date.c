@@ -59,6 +59,7 @@
 #define SECS_PER_HOUR 3600UL
 #define SECS_PER_DAY  86400UL
 #define EPOCH_YEAR    1978UL
+#define LAST_YEAR     2114UL  /* 0xFFFFFFFF seconds is 07-Feb-2114 */
 
 static const UWORD DaysInMonthTable[12] = {
     31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
@@ -205,5 +206,23 @@ ULONG CheckDate(struct ClockData *date)
     if (date->sec > 59)
         return 0;
 
-    return Date2Amiga(date);
+    /* A date past 07-Feb-2114 06:28:15 has no 32-bit seconds value.
+     * Date2Amiga() wraps for those (as the original's does), but the
+     * original's CheckDate() reports them as invalid -- confirmed
+     * against Kickstart 3.1 for 01-Jan-2200 and 08-Feb-2114. Reject
+     * far years outright, then let a round trip catch the wrap inside
+     * 2114 itself. */
+    if (date->year > LAST_YEAR)
+        return 0;
+
+    {
+        ULONG seconds = Date2Amiga(date);
+        struct ClockData check;
+
+        Amiga2Date(seconds, &check);
+        if (check.year != date->year || check.month != date->month || check.mday != date->mday)
+            return 0;
+
+        return seconds;
+    }
 }
