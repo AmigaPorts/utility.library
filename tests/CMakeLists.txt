@@ -8,3 +8,8 @@ add_executable(UtilityCheck utilitycheck.c kprint.c)
 target_compile_definitions(UtilityCheck PRIVATE EXPECT_LIB_VERSION=${PROJECT_VERSION_MAJOR} EXPECT_LIB_REVISION=${PROJECT_VERSION_MINOR})
 target_compile_options(UtilityCheck PRIVATE -noixemul -O2 -Wall)
 target_link_options(UtilityCheck PRIVATE -noixemul)
+
+# Uses only the system's own utility.library; see the comment in the source.
+add_executable(RomNamedObjectCheck romnamedobject.c)
+target_compile_options(RomNamedObjectCheck PRIVATE -noixemul -O1 -Wall)
+target_link_options(RomNamedObjectCheck PRIVATE -noixemul)
