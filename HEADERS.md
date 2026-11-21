@@ -55,8 +55,12 @@ implemented.
 
 The math functions do not need the library base in A6 and preserve all
 address registers, including A0 and A1. The divide functions return the
-quotient in D0 and the remainder in D1; the 64-bit multiplies return the high
-half in D0 and the low half in D1.
+quotient in D0 and the remainder in D1. The 64-bit multiplies return different
+registers per CPU, as the original does: on a 68020 or later the exact product
+with the low half in D0 and the high half in D1; on a 68000 or 68010 the high
+half in D0 and the low half in D1, where a negative product is not the exact
+two's complement value. The CPU is read from exec's `AttnFlags` at call time,
+so one binary serves both.
 
 Vector order and register assignments were taken as interface facts from
 AROS's [`utility.conf`](https://github.com/aros-development-team/AROS/blob/master/rom/utility/utility.conf)

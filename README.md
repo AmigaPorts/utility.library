@@ -77,7 +77,7 @@ library they exercise. The cause is not yet known and the output after
 | CallHookPkt | ✅ |
 | Amiga2Date, Date2Amiga, CheckDate | ✅ |
 | SMult32, UMult32, SDivMod32, UDivMod32 | ✅ |
-| SMult64, UMult64 | ✅ |
+| SMult64, UMult64 (68000 and 68020 conventions) | ✅ |
 | Stricmp, Strnicmp, ToUpper, ToLower | ✅ |
 | Named objects and GetUniqueID | ✅ |
 | AmigaOS 3.2 additions (VSNPrintf, Strncpy, Strncat, SDivMod64, UDivMod64) | ❌ |

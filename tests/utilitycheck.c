@@ -1328,20 +1328,41 @@ static void test_udivmod32(struct Library *newBase, struct Library *realBase)
  * (0x24101100).
  * ====================================================================== */
 
-static void test_umult64(struct Library *newBase, struct Library *realBase)
+/* The original's 64-bit multiplies return different registers per CPU: a
+ * 68020 or later gives the exact product with the low half in D0 and the
+ * high half in D1, while a 68000 or 68010 returns the high half in D0 (and,
+ * for a negative product, a result that is not the exact two's complement
+ * value). Both libraries must match the expectation for the CPU the test
+ * runs on, and preserve A0 and A1. */
+static void check_mult64(CONST_STRPTR name, BOOL isSigned, ULONG a, ULONG b,
+                         ULONG d0For68000, ULONG d1For68000, ULONG hiExact, ULONG loExact,
+                         struct Library *newBase, struct Library *realBase)
 {
     struct MathResult newR, realR;
+    BOOL cpu020 = (BOOL)((SysBase->AttnFlags & AFF_68020) != 0);
+    ULONG d0 = cpu020 ? loExact : d0For68000;
+    ULONG d1 = cpu020 ? hiExact : d1For68000;
     BOOL ok;
 
-    UMult64_Call(newBase, 70000UL, 70000UL, &newR);
-    UMult64_Call(realBase, 70000UL, 70000UL, &realR);
+    if (isSigned) {
+        SMult64_Call(newBase, a, b, &newR);
+        SMult64_Call(realBase, a, b, &realR);
+    } else {
+        UMult64_Call(newBase, a, b, &newR);
+        UMult64_Call(realBase, a, b, &realR);
+    }
 
-    ok = (newR.d0 == 1UL) && (newR.d1 == 605032704UL) &&
-         (realR.d0 == 1UL) && (realR.d1 == 605032704UL) &&
+    ok = (newR.d0 == d0) && (newR.d1 == d1) && (realR.d0 == d0) && (realR.d1 == d1) &&
          newR.a0 == MATH_SENTINEL_A0 && newR.a1 == MATH_SENTINEL_A1 &&
          realR.a0 == MATH_SENTINEL_A0 && realR.a1 == MATH_SENTINEL_A1;
 
-    result((CONST_STRPTR) "UMult64-ResultAndA0A1Preserved", ok);
+    result(name, ok);
+}
+
+static void test_umult64(struct Library *newBase, struct Library *realBase)
+{
+    check_mult64((CONST_STRPTR) "UMult64-ResultAndA0A1Preserved", FALSE, 70000UL, 70000UL,
+                  1UL, 605032704UL, 1UL, 605032704UL, newBase, realBase);
 }
 
 /* SMult64's negative-result path has a confirmed, reproducible
@@ -1362,65 +1383,20 @@ static void test_umult64(struct Library *newBase, struct Library *realBase)
 
 static void test_smult64_large_negative(struct Library *newBase, struct Library *realBase)
 {
-    struct MathResult newR, realR;
-    BOOL ok;
-
-    /* -70000 * 70000: mathematically -4,900,000,000, but the real ROM's
-     * own negation quirk gives D0:D1 = 0xFFFFFFFF:0xDBEFEEFF (one more
-     * than correct in the high word, one less than correct in the low
-     * word) because the unsigned magnitude product's high word (1) is
-     * nonzero. */
-    SMult64_Call(newBase, (ULONG)(LONG)-70000, 70000UL, &newR);
-    SMult64_Call(realBase, (ULONG)(LONG)-70000, 70000UL, &realR);
-
-    ok = (newR.d0 == 0xFFFFFFFFUL) && (newR.d1 == 0xDBEFEEFFUL) &&
-         (realR.d0 == 0xFFFFFFFFUL) && (realR.d1 == 0xDBEFEEFFUL) &&
-         newR.a0 == MATH_SENTINEL_A0 && newR.a1 == MATH_SENTINEL_A1 &&
-         realR.a0 == MATH_SENTINEL_A0 && realR.a1 == MATH_SENTINEL_A1;
-
-    result((CONST_STRPTR) "SMult64-LargeNegativeOracleQuirk", ok);
+    check_mult64((CONST_STRPTR) "SMult64-LargeNegativeOracleQuirk", TRUE, (ULONG)(LONG)-70000, 70000UL,
+                  0xFFFFFFFFUL, 0xDBEFEEFFUL, 0xFFFFFFFEUL, 0xDBEFEF00UL, newBase, realBase);
 }
 
 static void test_smult64_small_negative(struct Library *newBase, struct Library *realBase)
 {
-    struct MathResult newR, realR;
-    BOOL ok;
-
-    /* -7 * 6: mathematically -42, but the real ROM's own negation quirk
-     * gives D0:D1 = 0x00000000:0xFFFFFFD6 (the high word doesn't get
-     * the correct all-1s sign extension -- it wraps to 0 -- while the
-     * low word, 0xFFFFFFD6, happens to be correct here) because the
-     * unsigned magnitude product's high word (0) IS zero -- the other
-     * branch of the same quirk. */
-    SMult64_Call(newBase, (ULONG)(LONG)-7, 6UL, &newR);
-    SMult64_Call(realBase, (ULONG)(LONG)-7, 6UL, &realR);
-
-    ok = (newR.d0 == 0x00000000UL) && (newR.d1 == 0xFFFFFFD6UL) &&
-         (realR.d0 == 0x00000000UL) && (realR.d1 == 0xFFFFFFD6UL) &&
-         newR.a0 == MATH_SENTINEL_A0 && newR.a1 == MATH_SENTINEL_A1 &&
-         realR.a0 == MATH_SENTINEL_A0 && realR.a1 == MATH_SENTINEL_A1;
-
-    result((CONST_STRPTR) "SMult64-SmallNegativeOracleQuirk", ok);
+    check_mult64((CONST_STRPTR) "SMult64-SmallNegativeOracleQuirk", TRUE, (ULONG)(LONG)-7, 6UL,
+                  0x00000000UL, 0xFFFFFFD6UL, 0xFFFFFFFFUL, 0xFFFFFFD6UL, newBase, realBase);
 }
 
 static void test_smult64_both_negative(struct Library *newBase, struct Library *realBase)
 {
-    struct MathResult newR, realR;
-    BOOL ok;
-
-    /* -70000 * -70000 = +4,900,000,000 -- a POSITIVE result from two
-     * negative operands. Confirmed unaffected by the negation quirk
-     * above (there's no negation to apply): D0:D1 = 0x00000001:
-     * 0x24101100, the mathematically exact magnitude product. */
-    SMult64_Call(newBase, (ULONG)(LONG)-70000, (ULONG)(LONG)-70000, &newR);
-    SMult64_Call(realBase, (ULONG)(LONG)-70000, (ULONG)(LONG)-70000, &realR);
-
-    ok = (newR.d0 == 1UL) && (newR.d1 == 605032704UL) &&
-         (realR.d0 == 1UL) && (realR.d1 == 605032704UL) &&
-         newR.a0 == MATH_SENTINEL_A0 && newR.a1 == MATH_SENTINEL_A1 &&
-         realR.a0 == MATH_SENTINEL_A0 && realR.a1 == MATH_SENTINEL_A1;
-
-    result((CONST_STRPTR) "SMult64-BothNegativeUnaffected", ok);
+    check_mult64((CONST_STRPTR) "SMult64-BothNegativeUnaffected", TRUE, (ULONG)(LONG)-70000, (ULONG)(LONG)-70000,
+                  1UL, 605032704UL, 1UL, 605032704UL, newBase, realBase);
 }
 
 /* ======================================================================

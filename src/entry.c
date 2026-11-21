@@ -10,6 +10,9 @@
 // This file holds only assembly, so the compiler never emits code into a
 // section these blocks have switched behind its back.
 #include <exec/types.h>
+#include <exec/execbase.h>
+
+#include <stddef.h>
 
 #define ENTRY_BEGIN(name) asm("\t.text\n\t.even\n\t.globl _" #name "Entry\n_" #name "Entry:")
 #define ENTRY_PUSH(reg) asm("\tmove.l " #reg ",-(sp)")
@@ -33,6 +36,38 @@
 #define ENTRY_MATH(name)                                                                                               \
     ENTRY_BEGIN(name);                                                                                                 \
     asm("\tmove.l a0,-(sp)\n\tmove.l a1,-(sp)\n\tmove.l d1,-(sp)\n\tmove.l d0,-(sp)");                                 \
+    asm("\tjsr _" #name "\n\taddq.l #8,sp\n\tmove.l (sp)+,a1\n\tmove.l (sp)+,a0\n\trts")
+
+// The 64-bit multiplies return their product in different registers depending
+// on the CPU, as the original does: a 68020 or later gives the exact product
+// with the low half in D0 and the high half in D1 (the result of MULS.L or
+// MULU.L into D1:D0), while a 68000 or 68010 goes through the software path in
+// math.c, which returns the high half in D0. Exec records the CPU in AttnFlags
+// at ExecBase+296, which is readable without A6 and without clobbering anything
+// but the flags.
+//
+// The 68020 instruction is emitted as raw words so the file still assembles for
+// a 68000 target: 0x4C01 is MULx.L D1,<Dh:Dl> and the extension word selects
+// D0 as Dl, D1 as Dh, a 64-bit result, and signed (bit 11) or unsigned.
+_Static_assert(offsetof(struct ExecBase, AttnFlags) == 296, "AttnFlags offset assumed by ENTRY_MATH64");
+
+#define ENTRY_MATH64(name, extension)                                                                                  \
+    ENTRY_BEGIN(name);                                                                                                 \
+    asm("\tmove.l a0,-(sp)\n\tmovea.l 4.w,a0\n\tbtst #1,297(a0)\n\tmovea.l (sp)+,a0\n\tbeq.s 1f");                      \
+    asm("\t.word 0x4C01," #extension "\n\trts\n1:");                                                               \
+    asm("\tmove.l a0,-(sp)\n\tmove.l a1,-(sp)\n\tmove.l d1,-(sp)\n\tmove.l d0,-(sp)");                             \
+    asm("\tjsr _" #name "\n\taddq.l #8,sp\n\tmove.l (sp)+,a1\n\tmove.l (sp)+,a0\n\trts")
+
+// The 32-bit multiplies give the same truncated product on every CPU, so a
+// 68020 or later may simply use MULS.L/MULU.L (0x4C01 is MULx.L D1,D0; the
+// extension word selects D0 as the destination, a 32-bit result and signed
+// or unsigned). Divisions stay in software: a native divide by zero would
+// raise an exception where the software path returns a defined result.
+#define ENTRY_MULT32(name, extension)                                                                                  \
+    ENTRY_BEGIN(name);                                                                                                 \
+    asm("\tmove.l a0,-(sp)\n\tmovea.l 4.w,a0\n\tbtst #1,297(a0)\n\tmovea.l (sp)+,a0\n\tbeq.s 1f");                      \
+    asm("\t.word 0x4C01," #extension "\n\trts\n1:");                                                               \
+    asm("\tmove.l a0,-(sp)\n\tmove.l a1,-(sp)\n\tmove.l d1,-(sp)\n\tmove.l d0,-(sp)");                             \
     asm("\tjsr _" #name "\n\taddq.l #8,sp\n\tmove.l (sp)+,a1\n\tmove.l (sp)+,a0\n\trts")
 
 ENTRY_2(FindTagItem, d0, a0);
@@ -59,8 +94,8 @@ asm("\tmove.l 8(a0),-(sp)\n\trts");
 ENTRY_2(Amiga2Date, d0, a0);
 ENTRY_1(Date2Amiga, a0);
 ENTRY_1(CheckDate, a0);
-ENTRY_MATH(SMult32);
-ENTRY_MATH(UMult32);
+ENTRY_MULT32(SMult32, 0x0800);
+ENTRY_MULT32(UMult32, 0x0000);
 ENTRY_MATH(SDivMod32);
 ENTRY_MATH(UDivMod32);
 ENTRY_2(Stricmp, a0, a1);
@@ -68,8 +103,8 @@ ENTRY_3(Strnicmp, a0, a1, d0);
 ENTRY_1(ToUpper, d0);
 ENTRY_1(ToLower, d0);
 ENTRY_2(ApplyTagChanges, a0, a1);
-ENTRY_MATH(SMult64);
-ENTRY_MATH(UMult64);
+ENTRY_MATH64(SMult64, 0x0C01);
+ENTRY_MATH64(UMult64, 0x0401);
 ENTRY_3(PackStructureTags, a0, a1, a2);
 ENTRY_3(UnpackStructureTags, a0, a1, a2);
 ENTRY_2_BASE(AddNamedObject, a0, a1);
