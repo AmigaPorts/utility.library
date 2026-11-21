@@ -58,6 +58,13 @@ Copy `build/tests/utility-new.library` to `LIBS:` and run
 `build/tests/UtilityCheck` on the target. It reports one `PASS` or `FAIL` line
 per case on the serial port and on standard output.
 
+The summary line `DONE pass=N fail=0` is printed before four best-effort
+tests: the two concurrency tests and the two non-namespace tests. On
+Kickstart 3.1 the machine can crash in the ROM's own `FreeNamedObject()` while
+these run (exec's dead-end alert `0x81000005`, then a reboot), whichever
+library they exercise. The cause is not yet known and the output after
+`BESTEFFORT begin` may be cut short.
+
 ## Compatibility
 
 ✅ Matches tested original behavior; ❌ known difference or unsupported;
