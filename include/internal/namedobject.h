@@ -11,7 +11,7 @@ struct UtilityLibrary;
 // Initializes the root name space and its lock; called once from Init.
 void NamedObjectsLibInit(struct UtilityLibrary* base);
 
-BOOL AddNamedObject(struct NamedObject* nameSpace, struct NamedObject* object, struct UtilityLibrary* base);
+LONG AddNamedObject(struct NamedObject* nameSpace, struct NamedObject* object, struct UtilityLibrary* base);
 struct NamedObject* AllocNamedObjectA(STRPTR name, struct TagItem* tagList, struct UtilityLibrary* base);
 LONG AttemptRemNamedObject(struct NamedObject* object, struct UtilityLibrary* base);
 struct NamedObject* FindNamedObject(struct NamedObject* nameSpace, STRPTR name, struct NamedObject* lastObject,

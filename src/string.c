@@ -37,7 +37,8 @@
  * trail (first recording attempt's exact FAIL/DIAG output, the fix, and
  * the clean re-recording).
  * ======================================================================== */
-UBYTE ToUpper(UBYTE ch)
+/* ULONG, not UBYTE: the result must fill all of D0. */
+ULONG ToUpper(UBYTE ch)
 {
     if (ch >= 'a' && ch <= 'z')
         return (UBYTE)(ch - 'a' + 'A');
@@ -48,7 +49,7 @@ UBYTE ToUpper(UBYTE ch)
     return ch;
 }
 
-UBYTE ToLower(UBYTE ch)
+ULONG ToLower(UBYTE ch)
 {
     if (ch >= 'A' && ch <= 'Z')
         return (UBYTE)(ch - 'A' + 'a');

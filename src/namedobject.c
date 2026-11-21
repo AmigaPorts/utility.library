@@ -322,7 +322,9 @@ static void UnlinkFromNamespace(struct PrivNamedObject *po, struct UtilityLibrar
  * Flagged in provenance as an inference, not a quote -- confirmed or
  * corrected by this work package's own oracle testing.
  * ------------------------------------------------------------------------ */
-BOOL AddNamedObject(struct NamedObject *nameSpace, struct NamedObject *object, struct UtilityLibrary *base)
+/* Returns a full longword so no stale high word of D0 reaches the caller:
+ * 0 on failure and, as the original does, -1 on success. */
+LONG AddNamedObject(struct NamedObject *nameSpace, struct NamedObject *object, struct UtilityLibrary *base)
 {
     struct ExecBase *SysBase = base->exec;
     struct List *space;
@@ -377,7 +379,7 @@ BOOL AddNamedObject(struct NamedObject *nameSpace, struct NamedObject *object, s
 
     ReleaseSemaphore(&base->named_object_semaphore);
 
-    return TRUE;
+    return -1;
 }
 
 /* ------------------------------------------------------------------------
@@ -400,7 +402,9 @@ struct NamedObject *AllocNamedObjectA(STRPTR name, struct TagItem *tagList, stru
     if (!name)
         return NULL;
 
-    wantSpace = (BOOL)GetTagData(ANO_NameSpace, FALSE, tagList);
+    /* Any non-zero value counts, not just one with low-word bits set --
+     * confirmed against Kickstart 3.1 with ti_Data = 0x00010000. */
+    wantSpace = (BOOL)(GetTagData(ANO_NameSpace, FALSE, tagList) != 0);
     userSize = GetTagData(ANO_UserSpace, 0, tagList);
     priority = (LONG)GetTagData(ANO_Priority, 0, tagList);
     flags = GetTagData(ANO_Flags, 0, tagList);
@@ -735,6 +739,9 @@ struct NamedObject *FindNamedObject(struct NamedObject *nameSpace, STRPTR name,
 {
     struct ExecBase *SysBase = base->exec;
     struct List *space = SpaceOf(nameSpace, base);
+    /* NSF_CASE applies to searches too, not only to AddNamedObject()'s
+     * duplicate check -- confirmed against Kickstart 3.1. */
+    BOOL caseSensitive = (BOOL)((SpaceFlags(nameSpace) & NSF_CASE) != 0);
     struct Node *n;
     struct NamedObject *result = NULL;
 
@@ -751,7 +758,8 @@ struct NamedObject *FindNamedObject(struct NamedObject *nameSpace, STRPTR name,
         n = space->lh_Head;
 
     for (; n && n->ln_Succ; n = n->ln_Succ) {
-        if (!name || (n->ln_Name && Stricmp((STRPTR)n->ln_Name, name) == 0)) {
+        if (!name || (n->ln_Name && (caseSensitive ? NamesEqualCase((STRPTR)n->ln_Name, name)
+                                                   : Stricmp((STRPTR)n->ln_Name, name) == 0))) {
             struct PrivNamedObject *found =
                 (struct PrivNamedObject *)((UBYTE *)n - offsetof(struct PrivNamedObject, node));
 

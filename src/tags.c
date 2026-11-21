@@ -121,7 +121,8 @@ ULONG GetTagData(Tag tagValue, ULONG defaultVal, struct TagItem *tagList)
  * array, NOT a TagItem list. No TAG_SKIP/TAG_IGNORE/TAG_MORE handling
  * applies here (those are TagItem-list-only concepts).
  * ======================================================================== */
-BOOL TagInArray(Tag tagValue, Tag *tagArray)
+/* LONG, not BOOL: the result must fill all of D0. */
+LONG TagInArray(Tag tagValue, Tag *tagArray)
 {
     if (!tagArray)
         return FALSE;
