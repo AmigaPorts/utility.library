@@ -60,10 +60,17 @@ per case on the serial port and on standard output.
 
 The summary line `DONE pass=N fail=0` is printed before four best-effort
 tests: the two concurrency tests and the two non-namespace tests. On
-Kickstart 3.1 the machine can crash in the ROM's own `FreeNamedObject()` while
-these run (exec's dead-end alert `0x81000005`, then a reboot), whichever
-library they exercise. The cause is not yet known and the output after
+Kickstart 3.1 the machine can crash while these run (exec's dead-end alert
+`0x81000005`, memory list corrupted, then a reboot) and the output after
 `BESTEFFORT begin` may be cut short.
+
+This is a Kickstart 3.1 problem, not specific to this library:
+`build/tests/RomNamedObjectCheck` uses only the system's own `utility.library`
+and ends in the same alert. It also shows that the ROM's `FreeNamedObject()`
+gives none of the object's memory back (`utility.doc` says it frees the
+object). Where the crash lands depends on the heap layout, so one more output
+line can hide it. Run the same program on other Kickstart versions and compare
+its output; the library under test is not involved.
 
 ## Compatibility
 
